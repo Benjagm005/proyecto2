@@ -1,25 +1,26 @@
 import React, { useState, useEffect } from 'react';
-import './PokemonFetcher.css'; // Opcional: para estilos básicos
+import './PokemonFetcher.css';
 
 const PokemonFetcher = () => {
   const [pokemones, setPokemones] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState(null);
-useEffect(() => {
+  const [tipos, setTipos] = useState([]);
+  const [tipoSeleccionado, setTipoSeleccionado] = useState('');
+
+  useEffect(() => {
     const fetchPokemones = async () => {
       try {
         setCargando(true);
         setError(null);
         const fetchedPokemones = [];
-        const pokemonIds = new Set(); // Usar un Set para asegurar IDs únicos
+        const pokemonIds = new Set();
 
-        // Generar 4 IDs de Pokémon únicos aleatorios
         while (pokemonIds.size < 4) {
-          const randomId = Math.floor(Math.random() * 898) + 1; // 898 es el número actual de Pokémon en la PokeAPI (puedes ajustarlo)
+          const randomId = Math.floor(Math.random() * 898) + 1;
           pokemonIds.add(randomId);
         }
 
-        // Convertir el Set a un array para iterar
         const idsArray = Array.from(pokemonIds);
 
         for (const id of idsArray) {
@@ -44,7 +45,53 @@ useEffect(() => {
     };
 
     fetchPokemones();
-  }, []); // El array vacío asegura que se ejecute solo una vez al montar el componente
+  }, []);
+
+  useEffect(() => {
+    const fetchTipos = async () => {
+      try {
+        const res = await fetch('https://pokeapi.co/api/v2/type');
+        const data = await res.json();
+        setTipos(data.results);
+      } catch (err) {
+        console.error('Error al cargar los tipos:', err);
+      }
+    };
+    fetchTipos();
+  }, []);
+
+  const handleTipoChange = async (e) => {
+    const tipo = e.target.value;
+    setTipoSeleccionado(tipo);
+
+    if (!tipo) return;
+
+    try {
+      setCargando(true);
+      const res = await fetch(`https://pokeapi.co/api/v2/type/${tipo}`);
+      const data = await res.json();
+      const pokemonsFiltrados = data.pokemon.slice(0, 4);
+
+      const detalles = await Promise.all(
+        pokemonsFiltrados.map(async (p) => {
+          const r = await fetch(p.pokemon.url);
+          const d = await r.json();
+          return {
+            id: d.id,
+            nombre: d.name,
+            imagen: d.sprites.front_default,
+            tipos: d.types.map(t => t.type.name),
+          };
+        })
+      );
+
+      setPokemones(detalles);
+    } catch (err) {
+      setError('Error al buscar Pokémon por tipo');
+    } finally {
+      setCargando(false);
+    }
+  };
 
   if (cargando) {
     return <div className="pokemon-container">Cargando Pokémon...</div>;
@@ -57,13 +104,26 @@ useEffect(() => {
   return (
     <div className='pokemon-container'>
       <h2>Tus 4 Pokémon Aleatorios</h2>
-      <div className="pokemon-list"> 
+
+      <div className="buscador-container">
+        <label htmlFor="tipo">Buscar por tipo: </label>
+        <select id="tipo" value={tipoSeleccionado} onChange={handleTipoChange}>
+          <option value="">Selecciona un tipo</option>
+          {tipos.map((tipo) => (
+            <option key={tipo.name} value={tipo.name}>
+              {tipo.name.charAt(0).toUpperCase() + tipo.name.slice(1)}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="pokemon-list">
         {pokemones.map(pokemon => (
           <div key={pokemon.id} className="pokemon-card">
             <h3>{pokemon.nombre.charAt(0).toUpperCase() + pokemon.nombre.slice(1)}</h3>
             <img src={pokemon.imagen} alt={pokemon.nombre} />
             <p>
-              **Tipos:** {pokemon.tipos.map(type => type.charAt(0).toUpperCase() + type.slice(1)).join(', ')}
+              <strong>Tipos:</strong> {pokemon.tipos.map(type => type.charAt(0).toUpperCase() + type.slice(1)).join(', ')}
             </p>
           </div>
         ))}
